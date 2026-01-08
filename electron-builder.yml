@@ -18,7 +18,7 @@ asarUnpack:
 # GitHub Release 发布配置
 publish:
   provider: github
-  owner: lijiaxu
+  owner: youzi001
   repo: pngCompress
   releaseType: release
 
