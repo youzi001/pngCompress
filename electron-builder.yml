@@ -15,12 +15,8 @@ asarUnpack:
   - "node_modules/@img/**"
   - "node_modules/**/*.node"
 
-# GitHub Release 发布配置
-publish:
-  provider: github
-  owner: youzi001
-  repo: pngCompress
-  releaseType: release
+# 不自动发布，由 GitHub Actions 统一处理
+publish: null
 
 files:
   - dist/**/*

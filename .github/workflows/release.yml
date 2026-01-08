@@ -6,6 +6,10 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# 全局权限设置
+permissions:
+  contents: write
+
 jobs:
   build-macos:
     runs-on: macos-latest
