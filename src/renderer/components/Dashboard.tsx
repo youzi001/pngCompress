@@ -289,15 +289,15 @@ const Dashboard: React.FC = () => {
 
   const processFiles = async (paths: string[], startIndex: number) => {
     setIsProcessing(true);
-    let processedCount = 0;
     
     window.electronAPI.removeProgressListeners();
     window.electronAPI.onProgress((_event: any, data: any) => {
       const result = data.result;
-      const currentIndex = startIndex + processedCount;
+      const filePath = result.filePath;
       
-      setFiles(prev => prev.map((f, idx) => {
-        if (idx === currentIndex) {
+      // 使用 filePath 精确匹配文件，而不是依赖索引
+      setFiles(prev => prev.map((f) => {
+        if (f.path === filePath) {
           return {
             ...f,
             originalSize: result.originalSize || 0,
@@ -309,17 +309,18 @@ const Dashboard: React.FC = () => {
             error: result.error,
           };
         }
-        if (idx === currentIndex + 1 && data.done < data.total) {
-          return { ...f, status: 'processing' as const, progress: 0 };
-        }
         return f;
       }));
 
-      processedCount++;
       if (data.done === data.total) setIsProcessing(false);
     });
 
-    setFiles(prev => prev.map((f, i) => i === startIndex ? { ...f, status: 'processing' as const, progress: 0 } : f));
+    // 将所有待处理的新文件标记为 processing 状态
+    setFiles(prev => prev.map((f, i) => 
+      i >= startIndex && f.status === 'pending' 
+        ? { ...f, status: 'processing' as const, progress: 0 } 
+        : f
+    ));
 
     try {
       await window.electronAPI.compressFiles(paths, { mode, quality });
