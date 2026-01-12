@@ -43,6 +43,8 @@ const i18n = {
     total: 'Total',
     savedLabel: 'Saved',
     clear: 'Clear',
+    delete: 'Delete',
+    errorTooltip: 'Compression failed',
     unsupportedFiles: 'Unsupported files skipped',
     onlySupport: 'Only PNG, JPG, JPEG are supported',
   },
@@ -75,6 +77,8 @@ const i18n = {
     total: '总计',
     savedLabel: '节省',
     clear: '清空',
+    delete: '删除',
+    errorTooltip: '压缩失败',
     unsupportedFiles: '已跳过不支持的文件',
     onlySupport: '仅支持 PNG, JPG, JPEG 格式',
   }
@@ -113,9 +117,14 @@ const Toast: React.FC<{ message: string; subMessage?: string; visible: boolean; 
 };
 
 // 单个文件行组件
-const FileRow: React.FC<{ file: FileItem; t: typeof i18n.en; formatSize: (n: number) => string }> = ({ file, t, formatSize }) => {
+const FileRow: React.FC<{ 
+  file: FileItem; 
+  t: typeof i18n.en; 
+  formatSize: (n: number) => string;
+  onDelete: (id: string) => void;
+}> = ({ file, t, formatSize, onDelete }) => {
   const [displayProgress, setDisplayProgress] = useState(0);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const startTimeRef = useRef<number>(0);
   const MIN_DURATION = 800;
 
@@ -145,6 +154,20 @@ const FileRow: React.FC<{ file: FileItem; t: typeof i18n.en; formatSize: (n: num
   const getStatusContent = () => {
     const labels = { pending: t.pending, success: t.done, error: t.error, skipped: t.skip };
     
+    // 错误状态：直接显示错误标签，带 tooltip
+    if (file.status === 'error') {
+      const errorMessage = file.error || t.errorTooltip;
+      return (
+        <span 
+          className="badge error" 
+          title={errorMessage}
+          style={{ cursor: 'help' }}
+        >
+          {labels.error}
+        </span>
+      );
+    }
+    
     if (file.status === 'processing') {
       return (
         <div className="progress-cell">
@@ -165,6 +188,7 @@ const FileRow: React.FC<{ file: FileItem; t: typeof i18n.en; formatSize: (n: num
       return <span className="badge pending">{labels.pending}</span>;
     }
     
+    // 完成动画中
     if (displayProgress > 0 && displayProgress < 100) {
       return (
         <div className="progress-cell">
@@ -187,6 +211,7 @@ const FileRow: React.FC<{ file: FileItem; t: typeof i18n.en; formatSize: (n: num
     <motion.div
       initial={{ opacity: 0, y: -5 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0 }}
       className="file-row"
     >
       <div className="file-info">
@@ -199,6 +224,13 @@ const FileRow: React.FC<{ file: FileItem; t: typeof i18n.en; formatSize: (n: num
         {file.savedSize > 0 ? `-${formatSize(file.savedSize)}` : '—'}
       </span>
       <span className="file-status">{getStatusContent()}</span>
+      <button 
+        className="btn-delete" 
+        onClick={() => onDelete(file.id)}
+        title={t.delete}
+      >
+        ×
+      </button>
     </motion.div>
   );
 };
@@ -331,7 +363,12 @@ const Dashboard: React.FC = () => {
 
   const handleClear = () => {
     setFiles([]);
+    setIsProcessing(false);
     window.electronAPI.removeProgressListeners();
+  };
+
+  const handleDeleteFile = (id: string) => {
+    setFiles(prev => prev.filter(f => f.id !== id));
   };
 
   const totalOriginal = files.reduce((sum, f) => sum + f.originalSize, 0);
@@ -418,11 +455,12 @@ const Dashboard: React.FC = () => {
               <span>{t.compressed}</span>
               <span>{t.saved}</span>
               <span>{t.status}</span>
+              <span></span>
             </div>
             <div className="file-list">
-              <AnimatePresence>
+              <AnimatePresence mode="popLayout">
                 {files.map((file) => (
-                  <FileRow key={file.id} file={file} t={t} formatSize={formatSize} />
+                  <FileRow key={file.id} file={file} t={t} formatSize={formatSize} onDelete={handleDeleteFile} />
                 ))}
               </AnimatePresence>
             </div>
@@ -443,7 +481,7 @@ const Dashboard: React.FC = () => {
             </>
           )}
         </div>
-        {files.length > 0 && !isProcessing && (
+        {files.length > 0 && (
           <button className="btn btn-text" onClick={handleClear}>{t.clear}</button>
         )}
       </footer>

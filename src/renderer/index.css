@@ -302,11 +302,11 @@ main.main.dragging {
   position: relative;
 }
 
-/* 表头固定 - 5列 */
+/* 表头固定 - 6列 */
 .list-header {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 1fr 65px 65px 55px 70px;
+  grid-template-columns: 1fr 65px 65px 55px 70px 30px;
   gap: 6px;
   padding: 8px 12px;
   background: var(--bg-darker);
@@ -333,7 +333,7 @@ main.main.dragging {
 
 .file-row {
   display: grid;
-  grid-template-columns: 1fr 65px 65px 55px 70px;
+  grid-template-columns: 1fr 65px 65px 55px 70px 30px;
   gap: 6px;
   padding: 6px 12px;
   background: var(--bg-row);
@@ -430,6 +430,34 @@ main.main.dragging {
 .badge.skipped {
   background: rgba(245, 158, 11, 0.15);
   color: var(--warning);
+}
+
+/* 删除按钮 */
+.btn-delete {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 16px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+
+.file-row:hover .btn-delete {
+  opacity: 1;
+}
+
+.btn-delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
 }
 
 .spinner {
