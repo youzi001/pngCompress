@@ -31,5 +31,5 @@ npm-debug.log*
 src-tauri/target/
 target/
 **/*.rs.bk
-Cargo.lock
+
 
