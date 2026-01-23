@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E40AF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1E3A8A;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="layerGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="layerGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#93C5FD;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#60A5FA;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Group with scale and translation to create padding (Combined 5% increase) -->
+  <g transform="translate(77, 77) scale(0.85)">
+      <!-- Rounded square background -->
+      <rect x="0" y="0" width="1024" height="1024" rx="220" ry="220" fill="url(#bgGrad)"/>
+      <!-- Bottom layer (darkest) -->
+      <path d="M250 680 L512 820 L774 680 L512 540 Z" fill="#2563EB"/>
+      <!-- Middle layer -->
+      <path d="M250 540 L512 680 L774 540 L512 400 Z" fill="url(#layerGrad1)"/>
+      <!-- Top layer (brightest) -->
+      <path d="M250 400 L512 540 L774 400 L512 260 Z" fill="url(#layerGrad2)"/>
+      <!-- Down arrow indicating compression -->
+      <path d="M512 120 L512 220 M470 175 L512 220 L554 175" stroke="white" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

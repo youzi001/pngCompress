@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '../api';
+import { listen } from '@tauri-apps/api/event';
 
 interface FileItem {
   id: string;
@@ -47,6 +49,8 @@ const i18n = {
     errorTooltip: 'Compression failed',
     unsupportedFiles: 'Unsupported files skipped',
     onlySupport: 'Only PNG, JPG, JPEG are supported',
+    duplicateTitle: 'Files already exist',
+    duplicateMsg: 'files were ignored',
   },
   zh: {
     title: '图片压缩工具',
@@ -81,6 +85,8 @@ const i18n = {
     errorTooltip: '压缩失败',
     unsupportedFiles: '已跳过不支持的文件',
     onlySupport: '仅支持 PNG, JPG, JPEG 格式',
+    duplicateTitle: '文件已存在',
+    duplicateMsg: '个文件被忽略',
   }
 };
 
@@ -257,45 +263,120 @@ const Dashboard: React.FC = () => {
     setToast({ visible: true, message, subMessage: subMessage || '' });
   };
 
-  const addFilesToQueue = async (inputPaths: string[]) => {
-    const allImagePaths = await window.electronAPI.scanPaths(inputPaths);
-    
-    // 检查是否有不支持的文件被跳过
-    const skippedCount = inputPaths.length - allImagePaths.length;
-    if (skippedCount > 0 && inputPaths.length > 0) {
-      // 如果输入的不是目录且被跳过了，说明是不支持的格式
-      showToast(t.unsupportedFiles, t.onlySupport);
-    }
-    
-    const existingPaths = new Set(files.map((f: FileItem) => f.path));
-    const newPaths = allImagePaths.filter((p: string) => !existingPaths.has(p));
-    if (newPaths.length === 0) return;
+  const unlistenRef = useRef<(() => void) | null>(null);
+  const unlistenDropRef = useRef<(() => void) | null>(null);
 
-    const newFiles: FileItem[] = newPaths.map((p: string, i: number) => ({
-      id: `${Date.now()}-${i}`,
-      name: p.split('/').pop() || p,
-      path: p,
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenFn: (() => void) | null = null;
+
+    const setupFileDrop = async () => {
+      const unlisten = await listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
+        if (event.payload.paths && event.payload.paths.length > 0) {
+          addFilesToQueue(event.payload.paths);
+        }
+      });
+
+      if (!isMounted) {
+        unlisten(); // Clean up immediately if component unmounted while awaiting
+      } else {
+        unlistenFn = unlisten;
+        unlistenDropRef.current = unlisten;
+      }
+    };
+    setupFileDrop();
+    
+    return () => {
+      isMounted = false;
+      if (unlistenFn) unlistenFn();
+      if (unlistenRef.current) unlistenRef.current();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ensure we always have access to latest files for deduplication logic
+  const filesRef = useRef(files);
+  // We only update ref from render if the render state is actually newer or same length
+  // to avoid overwriting our speculative update in addFilesToQueue
+  if (files.length >= filesRef.current.length) {
+     filesRef.current = files;
+  }
+
+  const addFilesToQueue = async (inputPaths: string[]) => {
+    // 1. Scan for all image paths (recursive)
+    const allImagePaths = await api.scanPaths(inputPaths) as string[];
+
+    // 2. Access current files from Ref
+    const currentFiles = filesRef.current;
+    const existingPaths = new Set(currentFiles.map(f => f.path));
+    
+    // 3. Filter strictly
+    const newPaths = allImagePaths.filter(p => !existingPaths.has(p));
+    
+    // If we have concurrent calls, newPaths might be empty for the second call
+    if (newPaths.length === 0) {
+        // If all paths are duplicates, we should still notify the user
+        const duplicateCount = allImagePaths.length;
+        if (duplicateCount > 0 && inputPaths.length > 0) {
+             showToast(t.duplicateTitle, `${duplicateCount} ${t.duplicateMsg}`);
+        }
+        return;
+    }
+
+    const duplicateCount = allImagePaths.length - newPaths.length;
+
+    // 4. Side Effect: Toast
+    if (duplicateCount > 0) {
+       showToast(t.duplicateTitle, `${duplicateCount} ${t.duplicateMsg}`);
+    }
+
+    // 5. Create items
+    const newFilesItems = newPaths.map((path, index) => ({
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: path.split(/[/\\]/).pop() || 'unknown',
+      path,
       originalSize: 0,
       compressedSize: 0,
       savedSize: 0,
       status: 'pending' as const,
-      progress: 0,
+      progress: 0
     }));
+
+    // 6. IMMEDIATE REF UPDATE to prevent race condition
+    // This allows subsequent calls (within ms) to see these files as 'existing'
+    filesRef.current = [...currentFiles, ...newFilesItems];
+
+    // 7. Update State
+    setFiles(prev => {
+        // Final safety check inside setter to be absolutely sure
+        const prevPaths = new Set(prev.map(f => f.path));
+        const trulyNewItems = newFilesItems.filter(f => !prevPaths.has(f.path));
+        if (trulyNewItems.length === 0) return prev;
+        return [...prev, ...trulyNewItems];
+    });
     
-    const startIndex = files.length;
-    setFiles(prev => [...prev, ...newFiles]);
-    await processFiles(newPaths, startIndex);
+    // 8. Trigger Logic
+    processNewFiles(newPaths, currentFiles.length);
   };
 
-  const processFiles = async (paths: string[], startIndex: number) => {
+  // Refs to track latest state for async callbacks (fixing closure staleness)
+  const modeRef = useRef(mode);
+  const qualityRef = useRef(quality);
+  modeRef.current = mode;
+  qualityRef.current = quality;
+
+  const processNewFiles = async (paths: string[], startIndex: number) => {
     setIsProcessing(true);
     
-    window.electronAPI.removeProgressListeners();
-    window.electronAPI.onProgress((_event: any, data: any) => {
+    if (unlistenRef.current) {
+        unlistenRef.current();
+        unlistenRef.current = null;
+    }
+
+    const unlisten = await api.onProgress((data) => {
       const result = data.result;
       const filePath = result.filePath;
       
-      // 使用 filePath 精确匹配文件，而不是依赖索引
       setFiles(prev => prev.map((f) => {
         if (f.path === filePath) {
           return {
@@ -314,16 +395,18 @@ const Dashboard: React.FC = () => {
 
       if (data.done === data.total) setIsProcessing(false);
     });
+    unlistenRef.current = unlisten;
 
     // 将所有待处理的新文件标记为 processing 状态
-    setFiles(prev => prev.map((f, i) => 
-      i >= startIndex && f.status === 'pending' 
+    setFiles(prev => prev.map((f) => 
+       paths.includes(f.path) && f.status === 'pending'
         ? { ...f, status: 'processing' as const, progress: 0 } 
         : f
     ));
 
     try {
-      await window.electronAPI.compressFiles(paths, { mode, quality });
+      // Use refs to get the LATEST mode/quality, not the ones captured in closure
+      await api.compressFiles(paths, { mode: modeRef.current, quality: qualityRef.current });
     } catch (err: any) {
       console.error(err);
       setIsProcessing(false);
@@ -336,10 +419,7 @@ const Dashboard: React.FC = () => {
     const droppedFiles = e.dataTransfer.files;
     if (droppedFiles.length > 0) {
       const paths = Array.from(droppedFiles)
-        .map(f => {
-          try { return window.electronAPI.getPathForFile(f); }
-          catch { return (f as any).path; }
-        })
+        .map(f => api.getPathForFile(f))
         .filter((p): p is string => typeof p === 'string');
       if (paths.length) addFilesToQueue(paths);
     }
@@ -357,19 +437,27 @@ const Dashboard: React.FC = () => {
 
   const handleClick = async () => {
     try {
-      const paths = await window.electronAPI.selectFiles();
+      const paths = await api.selectFiles();
       if (paths?.length) addFilesToQueue(paths);
     } catch (e) { console.error(e); }
   };
 
   const handleClear = () => {
     setFiles([]);
+    filesRef.current = []; // IMPORTANT: Sync Ref immediately
     setIsProcessing(false);
-    window.electronAPI.removeProgressListeners();
+    if (unlistenRef.current) {
+        unlistenRef.current();
+        unlistenRef.current = null;
+    }
   };
 
   const handleDeleteFile = (id: string) => {
-    setFiles(prev => prev.filter(f => f.id !== id));
+    setFiles(prev => {
+        const next = prev.filter(f => f.id !== id);
+        filesRef.current = next; // IMPORTANT: Sync Ref immediately
+        return next;
+    });
   };
 
   const totalOriginal = files.reduce((sum, f) => sum + f.originalSize, 0);
@@ -377,11 +465,8 @@ const Dashboard: React.FC = () => {
   const doneCount = files.filter(f => ['success', 'error', 'skipped'].includes(f.status)).length;
 
   return (
-    <div className="app" onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+    <div className="app" onDragOver={handleDragOver} onDragLeave={handleDragLeave}>
       <header className="header">
-        <div className="titlebar">
-          <span className="titlebar-title">{t.title}</span>
-        </div>
         <div className="toolbar">
           <div className="toolbar-section">
             <div className="mode-switcher">

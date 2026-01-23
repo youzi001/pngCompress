@@ -26,3 +26,10 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Rust / Tauri
+src-tauri/target/
+target/
+**/*.rs.bk
+Cargo.lock
+

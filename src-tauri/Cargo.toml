@@ -1,0 +1,25 @@
+[package]
+name = "pngcompress"
+version = "1.0.0"
+description = "A cross-platform image compression tool"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-fs = "2.0.0"
+tauri-plugin-shell = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+image = "0.24.9"
+walkdir = "2.5.0"
+rayon = "1.10.0"
+oxipng = "9.0.0"
+imagequant = "4.2.0"
+png = "0.17.10"
+bytemuck = "1.14"
+rgb = "0.8"

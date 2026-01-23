@@ -52,20 +52,7 @@ header.header {
   border-bottom: 1px solid var(--border-dark);
 }
 
-.titlebar {
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  -webkit-app-region: drag;
-  border-bottom: 1px solid var(--border-dark);
-}
-
-.titlebar-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
+/* .titlebar styles removed */
 
 .toolbar {
   padding: 8px 12px;

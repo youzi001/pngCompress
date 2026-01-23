@@ -1,120 +1,49 @@
-name: Build and Release
-
+name: Release
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
 
-# 全局权限设置
-permissions:
-  contents: write
-
 jobs:
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Download x64 sharp binaries
-        run: |
-          npm pack @img/sharp-darwin-x64
-          tar -xzf img-sharp-darwin-x64-*.tgz
-          mv package node_modules/@img/sharp-darwin-x64
-          rm img-sharp-darwin-x64-*.tgz
-          npm pack @img/sharp-libvips-darwin-x64
-          tar -xzf img-sharp-libvips-darwin-x64-*.tgz
-          mv package node_modules/@img/sharp-libvips-darwin-x64
-          rm img-sharp-libvips-darwin-x64-*.tgz
-
-      - name: Build macOS
-        run: npm run build:mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-builds
-          path: |
-            release/*.dmg
-            release/*.zip
-          retention-days: 5
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Windows
-        run: npm run build:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-builds
-          path: |
-            release/*.exe
-            release/*.zip
-          retention-days: 5
-
   release:
-    needs: [build-macos, build-windows]
-    runs-on: ubuntu-latest
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
+      - name: setup node
+        uses: actions/setup-node@v4
         with:
-          name: macos-builds
-          path: release/
+          node-version: 20
 
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
+      - name: install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          name: windows-builds
-          path: release/
+          # Those targets are for optional cross-compilation support.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: List release files
-        run: ls -la release/
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            release/*.dmg
-            release/*.exe
-            release/*.zip
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+      - name: install frontend dependencies
+        run: npm install
+
+      # Build the app and create a release
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'PngCompress v__VERSION__'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true
+          prerelease: false
