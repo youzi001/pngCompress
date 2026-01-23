@@ -37,11 +37,21 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
+      - name: determine build args
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            echo "TAURI_BUILD_ARGS=--target universal-apple-darwin" >> $GITHUB_ENV
+          else
+            echo "TAURI_BUILD_ARGS=" >> $GITHUB_ENV
+          fi
+
       # Build the app and create a release
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          args: ${{ env.TAURI_BUILD_ARGS }}
           tagName: ${{ github.ref_name }}
           releaseName: 'PngCompress v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
